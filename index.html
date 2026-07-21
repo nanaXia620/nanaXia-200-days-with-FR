@@ -1,0 +1,2704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Dom FR & Puppy Xia Particle</title>
+
+<style>
+html,body{
+    margin:0;
+    padding:0;
+    overflow:hidden;
+    background:#000;
+}
+
+canvas{
+    display:block;
+}
+
+#video{
+    position:absolute;
+    width:1px;
+    height:1px;
+    opacity:0;
+}
+</style>
+</head>
+
+<body>
+
+<video id="video" autoplay playsinline></video>
+
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+
+<script>
+
+const PARTICLE_COUNT = 6000;
+
+
+let scene;
+let camera;
+let renderer;
+
+let particle;
+let geometry;
+
+let targets = {};
+let currentTarget = null;
+
+
+/* =========================
+ THREE
+========================= */
+
+
+scene = new THREE.Scene();
+
+
+camera = new THREE.OrthographicCamera(
+    -5,
+    5,
+    5,
+    -5,
+    0.1,
+    100
+);
+
+camera.position.z = 10;
+
+
+
+renderer = new THREE.WebGLRenderer({
+    antialias:true,
+    alpha:true
+});
+
+
+renderer.setPixelRatio(
+    window.devicePixelRatio
+);
+
+
+renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
+
+
+document.body.appendChild(
+    renderer.domElement
+);
+
+
+
+/* =========================
+ 主粒子
+========================= */
+
+
+let positions =
+new Float32Array(
+    PARTICLE_COUNT*3
+);
+
+
+
+for(
+    let i=0;
+    i<PARTICLE_COUNT;
+    i++
+){
+
+    let i3=i*3;
+
+    positions[i3] =
+    (Math.random()-0.5)*8;
+
+
+    positions[i3+1] =
+    (Math.random()-0.5)*8;
+
+
+    positions[i3+2]=0;
+
+}
+
+
+
+geometry =
+new THREE.BufferGeometry();
+
+
+
+geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+        positions,
+        3
+    )
+);
+
+
+
+let material =
+new THREE.PointsMaterial({
+
+    color:0xffffff,
+
+    size:0.075,
+
+    transparent:true,
+
+    opacity:1,
+
+    depthWrite:false,
+
+    blending:
+    THREE.AdditiveBlending
+
+});
+
+
+
+particle =
+new THREE.Points(
+    geometry,
+    material
+);
+
+
+scene.add(
+    particle
+);
+
+
+
+
+/* =========================
+ 图片转粒子
+========================= */
+
+
+function loadImage(src,id){
+
+    let img=new Image();
+
+    img.src=src;
+
+
+    img.onload=function(){
+
+
+        let canvas =
+        document.createElement(
+            "canvas"
+        );
+
+
+        let ctx =
+        canvas.getContext(
+            "2d"
+        );
+
+
+        let scale =
+        800 /
+        Math.max(
+            img.width,
+            img.height
+        );
+
+
+        canvas.width =
+        img.width*scale;
+
+
+        canvas.height =
+        img.height*scale;
+
+
+
+        ctx.drawImage(
+            img,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+
+
+        let data =
+        ctx.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        ).data;
+
+
+
+        let points=[];
+
+
+
+        for(
+            let y=0;
+            y<canvas.height;
+            y+=3
+        ){
+
+            for(
+                let x=0;
+                x<canvas.width;
+                x+=3
+            ){
+
+                let index =
+                (y*canvas.width+x)*4;
+
+
+                let brightness =
+                (
+                    data[index]+
+                    data[index+1]+
+                    data[index+2]
+                )/3;
+
+
+                if(
+                    brightness<210
+                ){
+
+                    points.push({
+                        x:x,
+                        y:y
+                    });
+
+                }
+
+            }
+
+        }
+
+
+
+        let target =
+        new Float32Array(
+            PARTICLE_COUNT*3
+        );
+
+
+        let fit =
+        6 /
+        Math.max(
+            canvas.width,
+            canvas.height
+        );
+
+
+
+        for(
+            let i=0;
+            i<PARTICLE_COUNT;
+            i++
+        ){
+
+            let p =
+            points[
+                Math.floor(
+                    Math.random()
+                    *
+                    points.length
+                )
+            ];
+
+
+            if(!p)
+                p={x:0,y:0};
+
+
+
+            let i3=i*3;
+
+
+            target[i3] =
+            (
+                p.x -
+                canvas.width/2
+            )
+            *
+            fit;
+
+
+
+            target[i3+1] =
+            -(
+                p.y -
+                canvas.height/2
+            )
+            *
+            fit;
+
+
+
+            target[i3+2]=0;
+
+
+        }
+
+
+
+        targets[id]=target;
+
+
+    };
+
+}
+
+
+loadImage("./1.jpg",1);
+loadImage("./2.jpg",2);
+loadImage("./3.jpg",3);
+
+
+
+function morphTo(id){
+
+    if(targets[id]){
+
+        currentTarget =
+        targets[id];
+
+    }
+
+}
+/* =========================
+ 雪花背景
+========================= */
+
+
+let snowGeometry =
+new THREE.BufferGeometry();
+
+
+let snowCount = 1000;
+
+
+let snowPosition =
+new Float32Array(
+    snowCount*3
+);
+
+
+for(
+    let i=0;
+    i<snowCount;
+    i++
+){
+
+    let i3=i*3;
+
+
+    snowPosition[i3] =
+    (Math.random()-0.5)*15;
+
+
+    snowPosition[i3+1] =
+    (Math.random()-0.5)*15;
+
+
+    snowPosition[i3+2] =
+    -Math.random()*5;
+
+}
+
+
+
+snowGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+        snowPosition,
+        3
+    )
+);
+
+
+
+let snowMaterial =
+new THREE.PointsMaterial({
+
+    color:0xffffff,
+
+    size:0.08,
+
+    transparent:true,
+
+    opacity:0.65,
+
+    depthWrite:false
+
+});
+
+
+
+let snow =
+new THREE.Points(
+    snowGeometry,
+    snowMaterial
+);
+
+
+scene.add(snow);
+
+
+
+
+/* =========================
+ 粒子移动
+========================= */
+
+
+function updateParticles(){
+
+    if(!currentTarget)
+        return;
+
+
+
+    let pos =
+    geometry.attributes.position.array;
+
+
+
+    for(
+        let i=0;
+        i<PARTICLE_COUNT*3;
+        i++
+    ){
+
+        pos[i]+=
+        (
+            currentTarget[i]
+            -
+            pos[i]
+        )
+        *
+        0.06;
+
+    }
+
+
+
+    geometry.attributes.position.needsUpdate=true;
+
+}
+
+
+
+
+
+/* =========================
+ MediaPipe
+========================= */
+
+
+function startCamera(){
+
+
+    const video =
+    document.getElementById(
+        "video"
+    );
+
+
+
+    if(
+        !navigator.mediaDevices
+        ||
+        !navigator.mediaDevices.getUserMedia
+    ){
+
+        console.log(
+            "浏览器不支持摄像头"
+        );
+
+        return;
+
+    }
+
+
+
+
+    navigator.mediaDevices
+    .getUserMedia({
+
+        video:true
+
+    })
+
+    .then(
+    stream=>{
+
+
+        video.srcObject=stream;
+
+
+
+        const hands =
+        new Hands({
+
+            locateFile:function(file){
+
+                return (
+                "https://cdn.jsdelivr.net/npm/@mediapipe/hands/"
+                +
+                file
+                );
+
+            }
+
+        });
+
+
+
+        hands.setOptions({
+
+            maxNumHands:1,
+
+            modelComplexity:1,
+
+            minDetectionConfidence:0.7,
+
+            minTrackingConfidence:0.7
+
+        });
+
+
+
+        hands.onResults(
+            result=>{
+
+                detectGesture(result);
+
+            }
+        );
+
+
+
+        const camera =
+        new Camera(
+            video,
+            {
+
+                onFrame:async()=>{
+
+                    await hands.send({
+                        image:video
+                    });
+
+                },
+
+
+                width:640,
+
+                height:480
+
+            }
+        );
+
+
+        camera.start();
+
+
+
+        console.log(
+            "摄像头启动成功"
+        );
+
+
+    })
+
+
+    .catch(
+    err=>{
+
+        console.log(
+            "摄像头失败，使用键盘123",
+            err
+        );
+
+    });
+
+
+}
+
+
+
+
+
+/* =========================
+ 手势识别
+========================= */
+
+
+let lastGesture="";
+
+let lastGestureTime=0;
+
+
+
+function detectGesture(result){
+
+
+    if(
+        !result.multiHandLandmarks
+        ||
+        result.multiHandLandmarks.length===0
+    )
+    return;
+
+
+
+    let hand =
+    result.multiHandLandmarks[0];
+
+
+
+    let finger=[];
+
+
+
+    let tips=[
+        8,
+        12,
+        16,
+        20
+    ];
+
+
+
+    tips.forEach(
+    t=>{
+
+
+        finger.push(
+            hand[t].y
+            <
+            hand[t-2].y
+        );
+
+
+    });
+
+
+
+    let gesture=null;
+
+
+
+    // 张开手掌
+
+    if(
+        finger[0]
+        &&
+        finger[1]
+        &&
+        finger[2]
+        &&
+        finger[3]
+    ){
+
+        gesture="open";
+
+    }
+
+
+
+
+    // V
+
+    if(
+        finger[0]
+        &&
+        finger[1]
+        &&
+        !finger[2]
+        &&
+        !finger[3]
+    ){
+
+        gesture="v";
+
+    }
+
+
+
+
+    // 握拳
+
+    if(
+        !finger[0]
+        &&
+        !finger[1]
+        &&
+        !finger[2]
+        &&
+        !finger[3]
+    ){
+
+        gesture="fist";
+
+    }
+
+
+
+
+    if(
+        gesture
+        &&
+        gesture!==lastGesture
+        &&
+        Date.now()-lastGestureTime>1500
+    ){
+
+        lastGesture=gesture;
+
+        lastGestureTime=
+        Date.now();
+
+
+
+        if(
+            gesture==="open"
+        )
+            morphTo(1);
+
+
+
+        if(
+            gesture==="v"
+        )
+            morphTo(2);
+
+
+
+        if(
+            gesture==="fist"
+        )
+            morphTo(3);
+
+
+    }
+
+
+}
+/* =========================
+ 键盘备用控制
+========================= */
+
+
+window.addEventListener(
+    "keydown",
+    function(e){
+
+
+        if(e.key==="1"){
+
+            morphTo(1);
+
+        }
+
+
+        if(e.key==="2"){
+
+            morphTo(2);
+
+        }
+
+
+        if(e.key==="3"){
+
+            morphTo(3);
+
+        }
+
+
+    }
+);
+
+
+
+
+
+/* =========================
+ 动画
+========================= */
+
+
+function animate(){
+
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+
+    updateParticles();
+
+
+
+    // 雪花移动
+
+    let arr =
+    snow.geometry.attributes.position.array;
+
+
+
+    for(
+        let i=1;
+        i<arr.length;
+        i+=3
+    ){
+
+        arr[i]-=0.008;
+
+
+        if(
+            arr[i]<-8
+        ){
+
+            arr[i]=8;
+
+        }
+
+    }
+
+
+
+    snow.geometry.attributes.position.needsUpdate=true;
+
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+
+}
+
+
+
+
+/* =========================
+ 窗口适配
+========================= */
+
+
+window.addEventListener(
+    "resize",
+    function(){
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+
+    }
+);
+
+
+
+
+
+/* =========================
+ 启动
+========================= */
+
+
+window.onload=function(){
+
+
+    animate();
+
+
+    // 页面加载后请求摄像头
+
+    startCamera();
+
+
+};
+
+
+
+
+</script>
+
+<audio id="bgm" loop>
+    <source src="./felicity.mp3" type="audio/mp3">
+</audio>
+
+<script>
+let musicStarted = false;
+
+function startMusic(){
+    if(!musicStarted){
+        let music = document.getElementById("bgm");
+        music.volume = 0.35;
+        music.play();
+        musicStarted = true;
+    }
+}
+
+document.addEventListener("click", startMusic);
+
+document.addEventListener("keydown", startMusic);
+</script>
+
+<script>
+
+
+// ==========================
+// 粒子颜色主题
+// ==========================
+
+
+let oldMorphTo = morphTo;
+
+
+morphTo = function(id){
+
+
+    // 先执行原来的粒子变化
+
+    oldMorphTo(id);
+
+
+
+    // 再改变颜色
+
+
+    if(id===1){
+
+        // Dom FR & Puppy Xia
+        particle.material.color.set(
+            "#d8c7ff"
+        );
+
+    }
+
+
+
+    if(id===2){
+
+        // Puppy Xia
+        particle.material.color.set(
+            "#ffe2a8"
+        );
+
+    }
+
+
+
+    if(id===3){
+
+        // 200 DAY
+        particle.material.color.set(
+            "#ffd76a"
+        );
+
+    }
+
+
+};
+
+
+
+</script>
+
+<script>
+
+
+// ===========================
+// 手势控制粒子移动
+// ===========================
+
+
+let targetMoveX = 0;
+let targetMoveY = 0;
+
+
+// 保存原来的detectGesture
+
+let oldDetectGesture = detectGesture;
+
+
+detectGesture = function(result){
+
+
+    oldDetectGesture(result);
+
+
+
+    if(
+        result.multiHandLandmarks
+        &&
+        result.multiHandLandmarks.length>0
+    ){
+
+
+        let hand =
+        result.multiHandLandmarks[0];
+
+
+        // 手掌中心点
+
+        let x =
+        hand[9].x;
+
+
+        let y =
+        hand[9].y;
+
+
+
+        // 映射到屏幕
+
+        targetMoveX =
+        (x-0.5)*2;
+
+
+        targetMoveY =
+        -(y-0.5)*2;
+
+
+    }
+
+
+};
+
+
+
+
+// 平滑移动
+
+function followHand(){
+
+
+    particle.position.x +=
+    (
+        targetMoveX
+        -
+        particle.position.x
+    )
+    *
+    0.08;
+
+
+
+    particle.position.y +=
+    (
+        targetMoveY
+        -
+        particle.position.y
+    )
+    *
+    0.08;
+
+
+
+    requestAnimationFrame(
+        followHand
+    );
+
+
+}
+
+
+followHand();
+
+
+
+</script>
+
+<script>
+
+// ============================
+// 3D 景深雪花升级
+// ============================
+
+
+let snowLayers=[];
+
+
+function createSnowLayer(count,size,opacity,speed){
+
+
+    let geo =
+    new THREE.BufferGeometry();
+
+
+    let arr =
+    new Float32Array(count*3);
+
+
+
+    for(
+        let i=0;
+        i<count;
+        i++
+    ){
+
+        let i3=i*3;
+
+
+        arr[i3] =
+        (Math.random()-0.5)*15;
+
+
+        arr[i3+1] =
+        (Math.random()-0.5)*15;
+
+
+        arr[i3+2] =
+        -Math.random()*20;
+
+
+    }
+
+
+
+    geo.setAttribute(
+        "position",
+        new THREE.BufferAttribute(
+            arr,
+            3
+        )
+    );
+
+
+
+    let mat =
+    new THREE.PointsMaterial({
+
+        color:0xffffff,
+
+        size:size,
+
+        transparent:true,
+
+        opacity:opacity,
+
+        depthWrite:false,
+
+        blending:
+        THREE.AdditiveBlending
+
+    });
+
+
+
+    let layer =
+    new THREE.Points(
+        geo,
+        mat
+    );
+
+
+    layer.userData.speed=speed;
+
+
+    scene.add(layer);
+
+
+    snowLayers.push(layer);
+
+
+}
+
+
+
+// 近、中、远三层
+
+createSnowLayer(
+    120,
+    0.18,
+    0.9,
+    0.02
+);
+
+
+createSnowLayer(
+    400,
+    0.08,
+    0.55,
+    0.01
+);
+
+
+createSnowLayer(
+    900,
+    0.03,
+    0.25,
+    0.005
+);
+
+
+
+
+
+function animateSnow3D(){
+
+
+    snowLayers.forEach(
+    layer=>{
+
+
+        let pos =
+        layer.geometry.attributes.position.array;
+
+
+
+        for(
+            let i=1;
+            i<pos.length;
+            i+=3
+        ){
+
+            pos[i]-=
+            layer.userData.speed;
+
+
+
+            if(pos[i]<-8){
+
+                pos[i]=8;
+
+            }
+
+        }
+
+
+
+        layer.geometry.attributes.position.needsUpdate=true;
+
+
+
+    });
+
+
+    requestAnimationFrame(
+        animateSnow3D
+    );
+
+}
+
+
+
+animateSnow3D();
+
+
+</script>
+
+<script>
+
+
+// =================================
+// FINAL ART UPGRADE v2
+// 3D rotation + breathing glow
+// =================================
+
+
+
+// ----------
+// 1. 粒子轻微呼吸
+// ----------
+
+
+let glowTime = 0;
+
+
+function particleGlow(){
+
+
+    glowTime += 0.03;
+
+
+    let scale =
+    1 +
+    Math.sin(glowTime)*0.04;
+
+
+    particle.scale.set(
+        scale,
+        scale,
+        scale
+    );
+
+
+    requestAnimationFrame(
+        particleGlow
+    );
+
+}
+
+
+particleGlow();
+
+
+
+
+
+
+// ----------
+// 2. 手控制3D旋转
+// ----------
+
+
+let handRotateX = 0;
+
+let handRotateY = 0;
+
+
+
+let oldDetect =
+detectGesture;
+
+
+
+detectGesture=function(result){
+
+
+
+    oldDetect(result);
+
+
+
+    if(
+        result.multiHandLandmarks
+        &&
+        result.multiHandLandmarks.length
+    ){
+
+
+        let hand =
+        result.multiHandLandmarks[0];
+
+
+
+        let x =
+        hand[9].x;
+
+
+        let y =
+        hand[9].y;
+
+
+
+        handRotateY =
+        (x-0.5)*0.5;
+
+
+
+        handRotateX =
+        (y-0.5)*0.3;
+
+
+    }
+
+
+};
+
+
+
+
+
+function rotateParticle(){
+
+
+
+    particle.rotation.y +=
+    (
+        handRotateY -
+        particle.rotation.y
+    )
+    *
+    0.05;
+
+
+
+    particle.rotation.x +=
+    (
+        handRotateX -
+        particle.rotation.x
+    )
+    *
+    0.05;
+
+
+
+    requestAnimationFrame(
+        rotateParticle
+    );
+
+
+}
+
+
+rotateParticle();
+
+
+
+
+
+
+// ----------
+// 3. 光效呼吸
+// ----------
+
+
+let opacityTime=0;
+
+
+
+function glowOpacity(){
+
+
+    opacityTime+=0.025;
+
+
+    particle.material.opacity =
+    0.85+
+    Math.sin(opacityTime)*0.15;
+
+
+
+    requestAnimationFrame(
+        glowOpacity
+    );
+
+
+}
+
+
+glowOpacity();
+
+
+
+</script>
+
+<script>
+
+// =================================
+// 3D Depth Upgrade
+// 粒子空间厚度
+// =================================
+
+
+function addDepth(){
+
+
+    let pos =
+    geometry.attributes.position.array;
+
+
+
+    for(
+        let i=0;
+        i<PARTICLE_COUNT;
+        i++
+    ){
+
+        let i3=i*3;
+
+
+        // 给每个粒子增加Z轴随机深度
+
+        pos[i3+2] =
+        (Math.random()-0.5)
+        *
+        1.5;
+
+
+    }
+
+
+
+    geometry.attributes.position.needsUpdate=true;
+
+
+}
+
+
+
+addDepth();
+
+
+
+
+// 根据深度产生轻微漂浮
+
+function depthFloat(){
+
+
+    let pos =
+    geometry.attributes.position.array;
+
+
+
+    let time =
+    Date.now()*0.001;
+
+
+
+    for(
+        let i=0;
+        i<PARTICLE_COUNT;
+        i++
+    ){
+
+        let i3=i*3;
+
+
+        pos[i3+2]+=
+        Math.sin(
+            time+i
+        )
+        *
+        0.0005;
+
+
+    }
+
+
+
+    geometry.attributes.position.needsUpdate=true;
+
+
+    requestAnimationFrame(
+        depthFloat
+    );
+
+
+}
+
+
+
+depthFloat();
+
+
+
+</script>
+<script>
+
+
+// =====================================
+// Hidden Secret Mode
+// FR's Xia ♡
+// 握拳5秒触发
+// =====================================
+
+
+
+let secretTarget = null;
+
+let fistStartTime = 0;
+
+let secretActive = false;
+
+
+
+
+
+// ===============================
+// 创建隐藏文字粒子
+// ===============================
+
+
+function createSecretText(){
+
+
+    let canvas =
+    document.createElement("canvas");
+
+
+    let ctx =
+    canvas.getContext("2d");
+
+
+
+    canvas.width = 900;
+
+    canvas.height = 400;
+
+
+
+    ctx.fillStyle="white";
+
+    ctx.font=
+    "bold 120px Arial";
+
+    ctx.textAlign="center";
+
+    ctx.textBaseline="middle";
+
+
+
+    ctx.fillText(
+        "FR's Xia ♡",
+        450,
+        200
+    );
+
+
+
+    let data =
+    ctx.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    ).data;
+
+
+
+    let points=[];
+
+
+
+    for(
+        let y=0;
+        y<canvas.height;
+        y+=4
+    ){
+
+        for(
+            let x=0;
+            x<canvas.width;
+            x+=4
+        ){
+
+
+            let index =
+            (y*canvas.width+x)*4;
+
+
+
+            if(
+                data[index]>100
+            ){
+
+                points.push({
+                    x:x,
+                    y:y
+                });
+
+            }
+
+        }
+
+    }
+
+
+
+    secretTarget =
+    new Float32Array(
+        PARTICLE_COUNT*3
+    );
+
+
+
+    let scale =
+    0.006;
+
+
+
+    for(
+        let i=0;
+        i<PARTICLE_COUNT;
+        i++
+    ){
+
+
+        let p =
+        points[
+            Math.floor(
+                Math.random()
+                *
+                points.length
+            )
+        ];
+
+
+
+        if(!p)
+            p={x:450,y:200};
+
+
+
+        let i3=i*3;
+
+
+
+        secretTarget[i3]=
+        (
+            p.x-450
+        )
+        *
+        scale;
+
+
+
+        secretTarget[i3+1]=
+        -(
+            p.y-200
+        )
+        *
+        scale;
+
+
+
+        secretTarget[i3+2]=
+        (Math.random()-0.5)
+        *
+        0.8;
+
+
+    }
+
+
+
+}
+
+
+
+createSecretText();
+
+
+
+
+
+
+// ===============================
+// 监听握拳时间
+// ===============================
+
+
+
+let oldDetectSecret =
+detectGesture;
+
+
+
+detectGesture=function(result){
+
+
+
+    oldDetectSecret(result);
+
+
+
+    if(
+        result.multiHandLandmarks
+        &&
+        result.multiHandLandmarks.length
+    ){
+
+
+
+        let hand =
+        result.multiHandLandmarks[0];
+
+
+
+        let fingers=[];
+
+
+        let tips=[
+            8,
+            12,
+            16,
+            20
+        ];
+
+
+
+        tips.forEach(
+        t=>{
+
+
+            fingers.push(
+                hand[t].y
+                <
+                hand[t-2].y
+            );
+
+
+        });
+
+
+
+        let fist =
+        !fingers[0]
+        &&
+        !fingers[1]
+        &&
+        !fingers[2]
+        &&
+        !fingers[3];
+
+
+
+
+        if(fist){
+
+
+            if(
+                fistStartTime===0
+            ){
+
+                fistStartTime =
+                Date.now();
+
+            }
+
+
+
+            if(
+                Date.now()
+                -
+                fistStartTime
+                >
+                5000
+                &&
+                !secretActive
+            ){
+
+
+                secretActive=true;
+
+
+                morphSecret();
+
+
+            }
+
+
+
+        }
+        else{
+
+
+            fistStartTime=0;
+
+
+        }
+
+
+
+    }
+
+
+};
+
+
+
+
+
+
+
+// ===============================
+// 切换隐藏粒子
+// ===============================
+
+
+function morphSecret(){
+
+
+    if(!secretTarget)
+        return;
+
+
+
+    currentTarget =
+    secretTarget;
+
+
+
+    particle.material.color.set(
+        "#e8d7ff"
+    );
+
+
+}
+
+
+
+
+
+</script>
+
+// =================================
+// Secret Wind Chime Sound
+// 代码生成风铃音
+// =================================
+
+
+function playWindChime(){
+
+
+    let AudioContext =
+    window.AudioContext ||
+    window.webkitAudioContext;
+
+
+
+    let ctx =
+    new AudioContext();
+
+
+
+    let now =
+    ctx.currentTime;
+
+
+
+    // 几个和弦音
+
+    let notes=[
+        880,
+        1174,
+        1568
+    ];
+
+
+
+    notes.forEach(
+    (freq,index)=>{
+
+
+        let osc =
+        ctx.createOscillator();
+
+
+        let gain =
+        ctx.createGain();
+
+
+
+        osc.type="sine";
+
+
+        osc.frequency.value=
+        freq;
+
+
+
+        gain.gain.setValueAtTime(
+            0,
+            now
+        );
+
+
+        gain.gain.linearRampToValueAtTime(
+            0.18,
+            now+0.05
+        );
+
+
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            now+2
+        );
+
+
+
+        osc.connect(gain);
+
+        gain.connect(ctx.destination);
+
+
+
+        osc.start(
+            now+index*0.12
+        );
+
+
+        osc.stop(
+            now+2
+        );
+
+
+    });
+
+
+}
+</script>
+<script>
+
+// =================================
+// Secret Wind Chime
+// FR's Xia 彩蛋风铃
+// =================================
+
+
+let secretSoundPlayed = false;
+
+
+
+function playWindChime(){
+
+
+    let AudioContext =
+    window.AudioContext ||
+    window.webkitAudioContext;
+
+
+    let ctx =
+    new AudioContext();
+
+
+
+    let now =
+    ctx.currentTime;
+
+
+
+    let notes=[
+        880,
+        1174,
+        1568,
+        2093
+    ];
+
+
+
+    notes.forEach(
+    (freq,index)=>{
+
+
+        let osc =
+        ctx.createOscillator();
+
+
+        let gain =
+        ctx.createGain();
+
+
+
+        osc.type="sine";
+
+
+        osc.frequency.value =
+        freq;
+
+
+
+        let start =
+        now+
+        index*0.12;
+
+
+
+        gain.gain.setValueAtTime(
+            0,
+            start
+        );
+
+
+        gain.gain.linearRampToValueAtTime(
+            0.18,
+            start+0.05
+        );
+
+
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            start+2
+        );
+
+
+
+        osc.connect(gain);
+
+        gain.connect(
+            ctx.destination
+        );
+
+
+
+        osc.start(start);
+
+        osc.stop(
+            start+2
+        );
+
+
+    });
+
+
+}
+
+
+
+
+
+
+// 监听隐藏模式
+
+let oldMorphSecret =
+morphSecret;
+
+
+
+morphSecret=function(){
+
+
+    oldMorphSecret();
+
+
+
+    if(!secretSoundPlayed){
+
+
+        secretSoundPlayed=true;
+
+
+
+        setTimeout(
+            ()=>{
+
+                playWindChime();
+
+            },
+            800
+        );
+
+
+    }
+
+
+};
+
+
+
+
+
+</script>
+
+<script>
+
+// ================================
+// Secret Mode Reset
+// 允许彩蛋重复触发
+// ================================
+
+
+let oldMorphNormalReset = morphTo;
+
+
+morphTo = function(id){
+
+
+    // 切换普通图案时
+    // 重置隐藏状态
+
+    if(
+        typeof secretActive !== "undefined"
+    ){
+
+        secretActive = false;
+
+    }
+
+
+
+    oldMorphNormalReset(id);
+
+
+};
+
+</script>
+
+<script>
+
+setInterval(()=>{
+
+    if(
+        typeof secretSoundPlayed !== "undefined"
+    ){
+
+        secretSoundPlayed=false;
+
+    }
+
+},3000);
+
+
+</script>
+
+<!-- Opening Screen -->
+
+<div id="openingScreen">
+
+    <div id="openingTitle">
+        For my Master ♡
+    </div>
+
+
+    <div id="enterText">
+        Click to enter
+    </div>
+
+</div>
+
+
+
+<script>
+
+
+// ================================
+// Opening Screen
+// ================================
+
+
+let openingScreen =
+document.getElementById(
+    "openingScreen"
+);
+
+
+
+let enterText =
+document.getElementById(
+    "enterText"
+);
+
+
+
+
+
+enterText.onclick=function(){
+
+
+    openingScreen.style.opacity="0";
+
+
+
+    setTimeout(()=>{
+
+
+        openingScreen.style.display="none";
+
+
+    },1500);
+
+
+
+    // 启动音乐
+
+    let bgm =
+    document.querySelector("audio");
+
+
+    if(bgm){
+
+        bgm.play();
+
+    }
+
+
+};
+
+
+
+</script>
+
+
+
+
+<style>
+
+
+#openingScreen{
+
+
+    position:fixed;
+
+    top:0;
+
+    left:0;
+
+    width:100%;
+
+    height:100%;
+
+
+    background:#000;
+
+
+    z-index:99999;
+
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+
+
+
+    transition:
+    opacity 1.5s ease;
+
+
+}
+
+
+
+#openingTitle{
+
+
+    color:white;
+
+
+    font-size:42px;
+
+
+    font-family:
+    "Times New Roman",
+    serif;
+
+
+    letter-spacing:3px;
+
+
+    margin-bottom:35px;
+
+
+}
+
+
+
+#enterText{
+
+
+    color:#d8c7ff;
+
+
+    font-size:20px;
+
+
+    letter-spacing:4px;
+
+
+    cursor:pointer;
+
+
+    opacity:0.8;
+
+
+    transition:
+    all 0.3s ease;
+
+
+}
+
+
+
+#enterText:hover{
+
+
+    opacity:1;
+
+
+    transform:scale(1.08);
+
+
+}
+
+
+
+</style>
+
+<script>
+
+setTimeout(()=>{
+
+
+    if(typeof snowLayers !== "undefined"){
+
+
+        snowLayers.forEach(
+        (layer,index)=>{
+
+
+            if(index===0){
+
+                layer.material.size = 0.55;
+                layer.material.opacity = 1;
+
+            }
+
+
+            if(index===1){
+
+                layer.material.size = 0.28;
+                layer.material.opacity = 0.75;
+
+            }
+
+
+            if(index===2){
+
+                layer.material.size = 0.12;
+                layer.material.opacity = 0.45;
+
+            }
+
+
+            layer.material.needsUpdate=true;
+
+
+        });
+
+
+    }
+
+
+},2000);
+
+
+</script>
+<script>
+
+// =================================
+// Final Glow Upgrade
+// 粒子亮度增强
+// =================================
+
+
+setTimeout(()=>{
+
+
+    if(typeof particle !== "undefined"){
+
+
+        particle.material.opacity = 1;
+
+
+        particle.material.color.set(
+            "#fff4d6"
+        );
+
+
+        particle.material.size = 0.095;
+
+
+        particle.material.needsUpdate=true;
+
+
+    }
+
+
+
+},2000);
+
+
+
+</script>
+// =================================
+// Snow 3D Motion Upgrade
+// =================================
+
+
+let snowTime=0;
+
+
+function snowDepthMove(){
+
+
+    snowTime+=0.01;
+
+
+    if(typeof snowLayers!=="undefined"){
+
+
+        snowLayers.forEach(
+        (layer,index)=>{
+
+
+            layer.rotation.y =
+            Math.sin(
+                snowTime*(index+1)
+            )
+            *
+            0.15;
+
+
+
+            layer.position.z =
+            Math.sin(
+                snowTime+index
+            )
+            *
+            0.3;
+
+
+
+        });
+
+
+    }
+
+
+    requestAnimationFrame(
+        snowDepthMove
+    );
+
+
+}
+
+
+snowDepthMove();
+
+</script>
+<script>
+
+setTimeout(()=>{
+
+
+    if(typeof particle !== "undefined"){
+
+
+        particle.material.size = 0.12;
+
+
+        particle.material.color.set(
+            "#fff6d6"
+        );
+
+
+        particle.material.opacity = 1;
+
+
+        particle.material.needsUpdate=true;
+
+
+    }
+
+
+},2000);
+
+
+</script>
+<script>
+
+setInterval(()=>{
+
+    if(typeof particle !== "undefined"){
+
+        particle.material.opacity=1;
+
+    }
+
+},500);
+
+
+</script>
+<script>
+
+setInterval(()=>{
+
+    if(
+        lastGesture==="open"
+        &&
+        typeof particle!=="undefined"
+    ){
+
+        particle.material.color.set(
+            "#f0dcff"
+        );
+
+    }
+
+},500);
+
+
+</script>
+<script>
+
+let oldMorphColor = morphTo;
+
+
+morphTo=function(id){
+
+
+    oldMorphColor(id);
+
+
+    if(id===1){
+
+        particle.material.size=0.13;
+
+    }
+
+
+    if(id===2 || id===3){
+
+        particle.material.size=0.075;
+
+    }
+
+
+};
+
+</script>
+<script>
+
+// =================================
+// Stable Glow
+// 稳定粒子亮度
+// =================================
+
+
+setInterval(()=>{
+
+
+    if(typeof particle !== "undefined"){
+
+
+        let t =
+        Date.now()*0.002;
+
+
+
+        particle.material.opacity =
+        0.96+
+        Math.sin(t)*0.04;
+
+
+
+        particle.material.needsUpdate=true;
+
+
+    }
+
+
+},100);
+
+
+
+</script>
+
+
+</body>
+</html>
