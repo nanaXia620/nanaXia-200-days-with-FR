@@ -2698,6 +2698,103 @@ setInterval(()=>{
 
 
 </script>
+<script>
+
+// =================================
+// Waiting Star Field
+// 点击进入后的自由星尘状态
+// =================================
+
+
+let waitingStars = false;
+
+
+setTimeout(()=>{
+
+    waitingStars = true;
+
+
+},3000);
+
+
+
+function freeStarMotion(){
+
+
+    if(
+        waitingStars &&
+        typeof particle !== "undefined"
+    ){
+
+
+        let pos =
+        particle.geometry.attributes.position;
+
+
+        for(
+            let i=0;
+            i<pos.count;
+            i++
+        ){
+
+
+            let x =
+            pos.getX(i);
+
+
+            let y =
+            pos.getY(i);
+
+
+
+            // 轻微漂浮
+
+            x +=
+            Math.sin(
+                Date.now()*0.0005+i
+            )
+            *0.002;
+
+
+
+            y +=
+            Math.cos(
+                Date.now()*0.0006+i
+            )
+            *0.002;
+
+
+
+            pos.setXYZ(
+                i,
+                x,
+                y,
+                pos.getZ(i)
+            );
+
+
+        }
+
+
+        pos.needsUpdate=true;
+
+
+    }
+
+
+    requestAnimationFrame(
+        freeStarMotion
+    );
+
+
+}
+
+
+freeStarMotion();
+
+
+
+</script>
 
 
 </body>
